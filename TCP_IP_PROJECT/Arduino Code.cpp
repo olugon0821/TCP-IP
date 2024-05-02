@@ -5,6 +5,7 @@
 #include <MFRC522DriverPinSimple.h>
 #include <MFRC522DriverSPI.h>
 #include <MFRC522v2.h>
+#include <LiquidCrystal_I2C.h>
 
 enum CONTROL_PINS{
   TEMPER_HUMID = A0,
@@ -16,7 +17,9 @@ enum CONTROL_PINS{
 };
 
 const uint16_t STEP_REVOLUTION {2048U};
+const String Total_data = "";
 
+class LiquidCrystal_I2C lcd(0x3F,16,2);
 class DHT dht(TEMPER_HUMID, 11); // dht 객체 생성
 class Stepper stepping(STEP_REVOLUTION,42,43,44,45);
 class UltraSonicDistanceSensor ul_sn(TRIG, ECHO);
@@ -26,6 +29,7 @@ class MFRC522 mfrc522{driver};
 const String MASTER_CARD {String("C2A72B1B")};
 
 bool function_state = false;
+bool uid_read_state = false;
 
 void setup() {
   // put your setup code here, to run once:
@@ -34,6 +38,9 @@ void setup() {
   stepping.setSpeed(14);
   mfrc522.PCD_Init();
   Serial.begin(115200UL);
+  lcd.init();
+  lcd.home();
+  lcd.backlight();
   pinMode(RGB_RED, OUTPUT);
   pinMode(RGB_GREEN, OUTPUT);
   pinMode(RGB_BLUE, OUTPUT);
@@ -45,16 +52,23 @@ void loop() {
   function_state = false;
 
   Distance();
-  delay(100UL);
+  delay(35UL);
 
   if(Serial.available()){
-      const String in_comming_data {Serial.readStringUntil('\n')}; // 입력한 문자열을 \n 까지 받음
+      String in_comming_data = Serial.readStringUntil('\n'); // 입력한 문자열을 \n 까지 받음
       if(in_comming_data.equals("DOOR_OPEN")){
         stepping.step(STEP_REVOLUTION / 4);
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Door Is Open");
       }else if(in_comming_data.equals("DOOR_CLOSE")){
         stepping.step(-(STEP_REVOLUTION / 4));
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Door is Closed");
       }else{}
-    }
+  }
+    
 
   if(!mfrc522.PICC_IsNewCardPresent()) return;
   if(!mfrc522.PICC_ReadCardSerial()) return;
@@ -65,12 +79,10 @@ void loop() {
   tagID.toUpperCase(); // 소문자를 대문자로 변환
   mfrc522.PICC_HaltA(); // UID 이외에는 멈춤
   if(tagID == MASTER_CARD){
-    Serial.println("ID ALLOWED");
+    Serial.println(String(Total_data) + "ID ALLOWED");
   }else{
-    Serial.println("ID IS NOT ALLOWED");
+    Serial.println(String(Total_data) + "ID IS NOT ALLOWED");
   }
-
-  
 }
 
 void Distance() {
@@ -78,7 +90,7 @@ void Distance() {
     const float temperature {dht.readTemperature()};
     const float humidity {dht.readHumidity()};
     float distance = ul_sn.measureDistanceCm(temperature);
-    const String sending_data {String(temperature) + "," + String(humidity) + "," + String(distance)};
+    const String sending_data {String(temperature) + "," + String(humidity) + "," + String(distance) + ","};
 
     if (!function_state) {
       if (distance > 0 and distance <= 20) {
@@ -96,6 +108,7 @@ void Distance() {
       }
       // 시리얼 출력 추가
       Serial.println(sending_data);
+      Total_data = sending_data;
     }
   }
 }
